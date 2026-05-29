@@ -1,0 +1,19 @@
+{
+  "name": "particle-realm-v2",
+  "version": "1.0.0",
+  "description": "一个基于 Three.js 与 MediaPipe Hands 的单页 3D 粒子交互作品。",
+  "scripts": {
+    "build:styles": "tailwindcss -i ./styles/tailwind.input.css -o ./styles/tailwind.css --content ./index.html --minify",
+    "dev": "python3 -m http.server 8080"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@mediapipe/camera_utils": "^0.3.1675466862",
+    "@mediapipe/hands": "^0.4.1675469240",
+    "es-module-shims": "^1.6.3",
+    "tailwindcss": "^3.4.17",
+    "three": "^0.154.0"
+  }
+}
