@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="粒子幻境 v2.1：基于 Three.js 与 MediaPipe Hands 的 3D 粒子手势交互网页作品。支持摄像头手势缩放、旋转与双指翻滚。">
+    <meta name="description" content="粒子幻境 v3.0：基于 Three.js 与 MediaPipe Hands 的液态玻璃 3D 粒子手势交互网页作品，支持更柔和的摄像头手势控制与多形态切换。">
     <link rel="icon" href="./favicon.svg" type="image/svg+xml">
-    <title>3D 粒子手势交互系统 v2.1 - 双指旋钮操控版</title>
+    <title>3D 粒子手势交互系统 v3.0 - 液态玻璃粒子幻境</title>
     <link rel="stylesheet" href="./styles/tailwind.css">
     <script async src="./vendor/es-module-shims/es-module-shims.js"></script>
     <script type="importmap">
@@ -19,34 +19,132 @@
     <script src="./vendor/mediapipe/hands/hands.js"></script>
 
     <style>
-        body { margin: 0; overflow: hidden; background-color: #020205; font-family: 'Segoe UI', sans-serif; }
-        #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        :root {
+            --shape-accent: 94 242 255;
+            --bg-void: #030507;
+            --bg-ice: #091923;
+            --panel-edge: rgba(255, 255, 255, 0.16);
+            --panel-core: rgba(255, 255, 255, 0.08);
+            --panel-shadow: 0 24px 60px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.18), inset 0 -18px 28px rgba(7, 17, 28, 0.24);
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 15% 20%, rgba(76, 220, 255, 0.18), transparent 24%),
+                radial-gradient(circle at 85% 18%, rgba(124, 146, 255, 0.14), transparent 28%),
+                radial-gradient(circle at 50% 82%, rgba(18, 115, 255, 0.12), transparent 30%),
+                linear-gradient(180deg, #07111a 0%, #04070d 42%, #020304 100%);
+            font-family: 'Avenir Next', 'PingFang SC', 'Segoe UI', sans-serif;
+            color: white;
+        }
+
+        body::before,
+        body::after {
+            content: '';
+            position: fixed;
+            inset: auto;
+            pointer-events: none;
+            z-index: 0;
+            filter: blur(72px);
+            opacity: 0.48;
+            mix-blend-mode: screen;
+        }
+
+        body::before {
+            width: 28vw;
+            height: 28vw;
+            top: 12%;
+            left: 8%;
+            background: radial-gradient(circle, rgba(119, 255, 247, 0.28), rgba(119, 255, 247, 0));
+        }
+
+        body::after {
+            width: 34vw;
+            height: 34vw;
+            right: 5%;
+            bottom: 10%;
+            background: radial-gradient(circle, rgba(81, 127, 255, 0.26), rgba(81, 127, 255, 0));
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
         #video-element { display: none; }
         
         .glass-panel {
-            background: rgba(10, 10, 20, 0.7);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 20px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+            position: relative;
+            isolation: isolate;
+            overflow: hidden;
+            background:
+                linear-gradient(155deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05) 32%, rgba(142, 219, 255, 0.04) 65%, rgba(8, 15, 28, 0.18)),
+                rgba(7, 12, 22, 0.42);
+            backdrop-filter: blur(24px) saturate(160%);
+            -webkit-backdrop-filter: blur(24px) saturate(160%);
+            border: 1px solid var(--panel-edge);
+            border-radius: 28px;
+            box-shadow: var(--panel-shadow);
+        }
+
+        .glass-panel::before {
+            content: '';
+            position: absolute;
+            inset: 1px;
+            border-radius: inherit;
+            background:
+                linear-gradient(150deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.02) 38%, rgba(94, 242, 255, 0.08) 74%, rgba(255, 255, 255, 0.05)),
+                radial-gradient(circle at top left, rgba(255, 255, 255, 0.18), transparent 34%);
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .glass-panel::after {
+            content: '';
+            position: absolute;
+            left: 10%;
+            right: 10%;
+            top: 8%;
+            height: 26%;
+            border-radius: 999px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0));
+            filter: blur(18px);
+            opacity: 0.9;
+            pointer-events: none;
         }
 
         .control-btn {
             transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             position: relative;
             overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.03);
         }
         .control-btn:hover {
-            background: rgba(255, 255, 255, 0.15);
-            transform: translateY(-2px);
-            box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.13);
+            transform: translateY(-3px) scale(1.01);
+            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.18), 0 0 26px rgba(255, 255, 255, 0.08);
         }
         .control-btn.active {
-            background: linear-gradient(135deg, rgba(100, 200, 255, 0.4), rgba(100, 200, 255, 0.1));
-            border: 1px solid rgba(100, 200, 255, 0.5);
-            box-shadow: 0 0 25px rgba(79, 209, 197, 0.3);
+            background: linear-gradient(135deg, rgb(var(--shape-accent) / 0.34), rgba(255, 255, 255, 0.08));
+            border: 1px solid rgb(var(--shape-accent) / 0.46);
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22), 0 0 26px rgb(var(--shape-accent) / 0.24);
             text-shadow: 0 0 8px rgba(255,255,255,0.8);
+        }
+
+        .control-btn.active::after {
+            content: '';
+            position: absolute;
+            inset: auto 14% -30% 14%;
+            height: 70%;
+            background: radial-gradient(circle, rgb(var(--shape-accent) / 0.28), transparent 70%);
+            filter: blur(22px);
+            pointer-events: none;
         }
 
         .loader {
@@ -64,8 +162,130 @@
         .custom-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
         .custom-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
         
-        .mode-item { transition: all 0.2s ease; opacity: 0.4; transform: scale(0.95); font-weight: normal; }
-        .mode-item.active { opacity: 1; transform: scale(1.0); color: #22d3ee; font-weight: bold; text-shadow: 0 0 10px rgba(34, 211, 238, 0.4); }
+        .mode-item {
+            transition: all 0.2s ease;
+            opacity: 0.45;
+            transform: scale(0.96);
+            font-weight: normal;
+        }
+        .mode-item.active {
+            opacity: 1;
+            transform: scale(1.0);
+            color: rgb(var(--shape-accent));
+            font-weight: bold;
+            text-shadow: 0 0 12px rgb(var(--shape-accent) / 0.35);
+        }
+
+        .liquid-caption {
+            font-size: 10px;
+            letter-spacing: 0.24em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.54);
+        }
+
+        .liquid-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.05);
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 10px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+        }
+
+        .liquid-divider {
+            height: 1px;
+            width: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+        }
+
+        .hero-panel {
+            max-width: 360px;
+        }
+
+        .shape-rail {
+            width: min(100%, 780px);
+        }
+
+        .status-shell {
+            background: rgba(0, 0, 0, 0.28);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        }
+
+        .loader-help {
+            max-width: 32rem;
+            margin-top: 1.5rem;
+            padding: 1rem 1.1rem;
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
+            color: rgba(255, 255, 255, 0.82);
+            text-align: left;
+            line-height: 1.65;
+            box-shadow: 0 20px 48px rgba(0, 0, 0, 0.26);
+        }
+
+        .loader-help code {
+            display: block;
+            margin: 0.65rem 0;
+            padding: 0.7rem 0.8rem;
+            border-radius: 16px;
+            background: rgba(2, 8, 16, 0.72);
+            color: #9befff;
+            font-size: 12px;
+            word-break: break-all;
+        }
+
+        .loader-help.hidden {
+            display: none;
+        }
+
+        .loader-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .loader-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 16px;
+            border-radius: 999px;
+            color: #dffcff;
+            background: linear-gradient(135deg, rgba(0, 255, 255, 0.16), rgba(71, 134, 255, 0.18));
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            box-shadow: 0 14px 30px rgba(0, 0, 0, 0.24);
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+        }
+
+        .loader-link:hover {
+            transform: translateY(-1px);
+            border-color: rgba(155, 239, 255, 0.55);
+            box-shadow: 0 18px 36px rgba(0, 0, 0, 0.28);
+        }
+
+        @media (max-width: 767px) {
+            .hero-panel {
+                max-width: none;
+            }
+
+            .shape-rail {
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
@@ -75,24 +295,37 @@
 
     <!-- Loading -->
     <div id="loader-overlay" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black bg-opacity-95 transition-opacity duration-700">
-        <div class="loader mb-6 shadow-[0_0_30px_rgba(0,255,255,0.3)]"></div>
-        <div class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-blue-500 text-2xl font-bold tracking-widest uppercase">Visual Core</div>
-        <div class="text-gray-500 text-xs mt-3 tracking-widest">INITIALIZING PARTICLE ENGINE v2.1</div>
+        <div id="loader-spinner" class="loader mb-6 shadow-[0_0_30px_rgba(0,255,255,0.3)]"></div>
+        <div id="loader-title" class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-blue-500 text-2xl font-bold tracking-widest uppercase">Liquid Core</div>
+        <div id="loader-subtitle" class="text-gray-500 text-xs mt-3 tracking-widest">INITIALIZING PARTICLE ENGINE v3.0</div>
+        <div id="loader-help" class="loader-help hidden"></div>
     </div>
 
     <!-- UI -->
     <div class="absolute top-0 left-0 w-full h-full pointer-events-none z-10 p-4 md:p-8 flex flex-col justify-between">
         <div class="flex justify-between items-start pointer-events-auto">
-            <div class="glass-panel p-5 animate-fade-in-down transform transition-all hover:scale-105 duration-500">
-                <h1 class="text-white text-2xl font-bold tracking-tight mb-2 drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">粒子 · 幻境 <span class="text-xs text-cyan-400 align-top">v2.1</span></h1>
-                <div class="flex items-center gap-3 bg-black/30 rounded-full px-3 py-1 w-fit border border-white/5">
+            <div class="glass-panel hero-panel p-5 md:p-6 animate-fade-in-down transform transition-all hover:scale-105 duration-500">
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <div class="liquid-caption">Liquid Gesture Atelier</div>
+                        <h1 class="text-white text-2xl font-bold tracking-tight mt-2 drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">粒子 · 幻境 <span class="text-xs text-cyan-400 align-top">v3.0</span></h1>
+                        <p class="text-[12px] leading-5 text-gray-300 mt-3 max-w-xs">更柔和的手势反馈、3 个新增粒子宇宙形态，以及一整套升级后的液态玻璃界面。</p>
+                    </div>
+                    <div class="liquid-chip">V3</div>
+                </div>
+                <div class="status-shell flex items-center gap-3 rounded-full px-3 py-2 w-fit border border-white/5 mt-4">
                     <div id="status-dot" class="w-2 h-2 rounded-full bg-red-500 transition-all duration-500 shadow-[0_0_10px_red]"></div>
                     <span id="status-text" class="text-[10px] text-gray-300 font-mono uppercase tracking-wider">System Offline</span>
                 </div>
+                <div class="flex flex-wrap gap-2 mt-4">
+                    <span class="liquid-chip">灵敏度 -15%</span>
+                    <span class="liquid-chip">8 种形态</span>
+                    <span class="liquid-chip">Liquid Glass</span>
+                </div>
                 <div class="text-[10px] text-gray-400 mt-3 font-mono border-t border-white/10 pt-2 flex flex-col gap-1">
-                    <div id="mode-scale" class="mode-item">👋 五指张合: 能量爆发 (缩放)</div>
-                    <div id="mode-rotate" class="mode-item">☝️ 食指滑动: 视角旋转 (锁定缩放)</div>
-                    <div id="mode-roll" class="mode-item">✌️ 双指旋转: 平面翻转 (旋钮操控)</div>
+                    <div id="mode-scale" class="mode-item">👋 五指张合: 柔性缩放与能量扩散</div>
+                    <div id="mode-rotate" class="mode-item">☝️ 食指滑动: 低敏视角旋转</div>
+                    <div id="mode-roll" class="mode-item">✌️ 双指旋转: 惯性翻滚操控</div>
                 </div>
             </div>
             
@@ -104,20 +337,36 @@
         </div>
 
         <div class="pointer-events-auto flex flex-col md:flex-row gap-6 items-end md:items-center justify-between w-full">
-            <div class="glass-panel p-2 flex gap-2 overflow-x-auto max-w-full custom-scroll">
+            <div class="glass-panel shape-rail p-2 flex gap-2 overflow-x-auto max-w-full custom-scroll">
                 <button onclick="changeShape('sphere')" class="control-btn active px-6 py-3 rounded-xl text-sm text-white font-semibold whitespace-nowrap tracking-wide" data-shape="sphere">星云球</button>
                 <button onclick="changeShape('heart')" class="control-btn px-6 py-3 rounded-xl text-sm text-white font-semibold whitespace-nowrap tracking-wide" data-shape="heart">机械心</button>
                 <button onclick="changeShape('saturn')" class="control-btn px-6 py-3 rounded-xl text-sm text-white font-semibold whitespace-nowrap tracking-wide" data-shape="saturn">土星环</button>
                 <button onclick="changeShape('lotus')" class="control-btn px-6 py-3 rounded-xl text-sm text-white font-semibold whitespace-nowrap tracking-wide" data-shape="lotus">能量莲</button>
                 <button onclick="changeShape('galaxy')" class="control-btn px-6 py-3 rounded-xl text-sm text-white font-semibold whitespace-nowrap tracking-wide" data-shape="galaxy">黑洞</button>
+                <button onclick="changeShape('aurora')" class="control-btn px-6 py-3 rounded-xl text-sm text-white font-semibold whitespace-nowrap tracking-wide" data-shape="aurora">极光潮</button>
+                <button onclick="changeShape('prism')" class="control-btn px-6 py-3 rounded-xl text-sm text-white font-semibold whitespace-nowrap tracking-wide" data-shape="prism">量子立方</button>
+                <button onclick="changeShape('corona')" class="control-btn px-6 py-3 rounded-xl text-sm text-white font-semibold whitespace-nowrap tracking-wide" data-shape="corona">日冕环</button>
             </div>
 
-            <div class="glass-panel p-4 flex flex-col gap-3 hover:bg-white/10 transition-colors max-w-sm">
+            <div class="glass-panel p-4 md:p-5 flex flex-col gap-4 hover:bg-white/10 transition-colors w-full md:max-w-[24rem]">
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <div class="liquid-caption">Current Form</div>
+                        <div id="shape-name" class="text-white text-lg font-semibold mt-2">星云球</div>
+                    </div>
+                    <div id="shape-badge" class="liquid-chip">01 / 08</div>
+                </div>
+                <p id="shape-description" class="text-[12px] leading-6 text-gray-200">双层星云壳，适合看整体空间呼吸感与核心脉冲。</p>
+                <div class="liquid-divider"></div>
                 <div class="flex items-center gap-4">
                     <span class="text-white text-xs font-mono tracking-wider uppercase opacity-70">Emission Color</span>
                     <div class="relative w-8 h-8 rounded-full overflow-hidden ring-2 ring-white/20 hover:ring-cyan-400 transition-all">
                         <input type="color" id="color-picker" value="#00ffff" class="absolute -top-1/2 -left-1/2 w-[200%] h-[200%] cursor-pointer p-0 m-0 border-0" onchange="updateColor(this.value)">
                     </div>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <span class="liquid-chip">Local MediaPipe</span>
+                    <span class="liquid-chip">Adaptive Motion</span>
                 </div>
                 <p id="camera-hint" class="text-[11px] leading-5 text-gray-300 max-w-sm">
                     首次打开请允许摄像头权限。线上环境需使用 HTTPS，已授权后即可启用手势交互。
@@ -128,6 +377,83 @@
             </div>
         </div>
     </div>
+
+    <script>
+        (function () {
+            if (window.location.protocol !== 'file:') {
+                return;
+            }
+
+            const localFile = decodeURIComponent(window.location.pathname);
+            const localDir = localFile.slice(0, localFile.lastIndexOf('/'));
+            const escapedDir = localDir.replace(/'/g, "'\\''");
+            const previewUrl = 'http://127.0.0.1:8080';
+
+            const statusText = document.getElementById('status-text');
+            const cameraHint = document.getElementById('camera-hint');
+            const loaderSpinner = document.getElementById('loader-spinner');
+            const loaderTitle = document.getElementById('loader-title');
+            const loaderSubtitle = document.getElementById('loader-subtitle');
+            const loaderHelp = document.getElementById('loader-help');
+
+            const openPreview = () => {
+                window.location.href = previewUrl;
+            };
+
+            if (statusText) {
+                statusText.innerText = 'OPEN VIA LOCALHOST';
+                statusText.className = 'text-[10px] text-amber-300 font-mono uppercase tracking-wider';
+            }
+
+            if (cameraHint) {
+                cameraHint.innerText = '你现在是用 file:// 直接打开页面。Safari 和 Chrome 都会拦截本地文件模式下的模块与摄像头，所以页面会停在加载层。';
+            }
+
+            if (loaderSpinner) {
+                loaderSpinner.style.display = 'none';
+            }
+
+            if (loaderTitle) {
+                loaderTitle.innerText = 'Direct File Mode Blocked';
+            }
+
+            if (loaderSubtitle) {
+                loaderSubtitle.innerText = `请改用本地静态服务器，再打开 ${previewUrl}`;
+            }
+
+            if (loaderHelp) {
+                loaderHelp.classList.remove('hidden');
+                loaderHelp.innerHTML = `
+                    <div class="liquid-caption" style="margin-bottom: 8px;">Local Preview Fix</div>
+                    <div>这个页面不能通过 <code style="display:inline; margin:0; padding:0; background:none; color:#9befff;">file://</code> 直接运行。请在终端里执行：</div>
+                    <code>cd '${escapedDir}'\npython3 -m http.server 8080</code>
+                    <div>然后访问：</div>
+                    <code>${previewUrl}</code>
+                    <div>如果你想继续用现成脚本，也可以执行：</div>
+                    <code>cd '${escapedDir}'\nnpm run dev</code>
+                    <div class="loader-actions">
+                        <a class="loader-link" href="${previewUrl}">打开本地预览</a>
+                    </div>
+                `;
+            }
+
+            fetch(previewUrl, { mode: 'no-cors' })
+                .then(() => {
+                    if (loaderTitle) {
+                        loaderTitle.innerText = 'Localhost Preview Detected';
+                    }
+
+                    if (loaderSubtitle) {
+                        loaderSubtitle.innerText = '已检测到本地预览服务，正在自动跳转...';
+                    }
+
+                    setTimeout(openPreview, 900);
+                })
+                .catch(() => {
+                    // Keep the helper overlay visible when the preview server is not running yet.
+                });
+        })();
+    </script>
 
     <script type="module">
         import * as THREE from './vendor/three/build/three.module.js';
@@ -140,7 +466,68 @@
         const IS_MOBILE = window.matchMedia('(max-width: 768px)').matches;
         const PARTICLE_COUNT = IS_MOBILE ? 26000 : 45000;
         const PARTICLE_SIZE = IS_MOBILE ? 0.22 : 0.18;
-        const SATURN_BODY_RATIO = 0.3; 
+        const SATURN_BODY_RATIO = 0.3;
+        const SENSITIVITY_REDUCTION = 0.15;
+        const RESPONSE_MULTIPLIER = 1 - SENSITIVITY_REDUCTION;
+        const TRACKING_LERP = 0.2 * RESPONSE_MULTIPLIER;
+        const ROTATE_SENSITIVITY = 3.5 * RESPONSE_MULTIPLIER;
+        const ROLL_SENSITIVITY = 1.5 * RESPONSE_MULTIPLIER;
+        const SCALE_LERP_FACTOR = 0.2 * RESPONSE_MULTIPLIER;
+        const SCALE_IDLE_RECOVERY = 0.02 * RESPONSE_MULTIPLIER;
+        const MOVE_THRESHOLD = 0.005 * (1 + SENSITIVITY_REDUCTION);
+        const MODE_SWITCH_THRESHOLD = 5;
+        const MAX_ROTATION_SPEED = 0.06 * RESPONSE_MULTIPLIER;
+        const MAX_ROLL_SPEED = 0.035 * RESPONSE_MULTIPLIER;
+        const SHAPE_META = {
+            sphere: {
+                label: '星云球',
+                badge: '01 / 08',
+                accent: '94 242 255',
+                description: '双层星云壳，适合看整体空间呼吸感与核心脉冲。'
+            },
+            heart: {
+                label: '机械心',
+                badge: '02 / 08',
+                accent: '255 102 153',
+                description: '机械心核结构，外圈有不规则脉冲，整体更像在收缩与搏动。'
+            },
+            saturn: {
+                label: '土星环',
+                badge: '03 / 08',
+                accent: '255 198 99',
+                description: '行星主体与多层轨道带并行，适合展示环状空间张力。'
+            },
+            lotus: {
+                label: '能量莲',
+                badge: '04 / 08',
+                accent: '255 149 234',
+                description: '层叠花瓣与中轴能量束结合，视觉更柔和、呼吸感更明显。'
+            },
+            galaxy: {
+                label: '黑洞',
+                badge: '05 / 08',
+                accent: '133 160 255',
+                description: '旋臂向内塌陷的奇点结构，动态会呈现更深的引力卷吸感。'
+            },
+            aurora: {
+                label: '极光潮',
+                badge: '06 / 08',
+                accent: '122 255 213',
+                description: '多层极光幕带在空间中轻柔摆动，像漂浮在玻璃后的冷光潮汐。'
+            },
+            prism: {
+                label: '量子立方',
+                badge: '07 / 08',
+                accent: '138 232 255',
+                description: '体素化晶格与边缘骨架交错，整体更理性、几何感更强。'
+            },
+            corona: {
+                label: '日冕环',
+                badge: '08 / 08',
+                accent: '255 170 90',
+                description: '高温环冠与外侧耀斑同时扩散，适合展示放射性能量感。'
+            }
+        };
         
         // State
         let scene, camera, renderer, composer, particles, controls;
@@ -153,7 +540,7 @@
         let handsController, cameraController;
 
         // Color State
-        let userBaseColor = new THREE.Color(0x00ffff); 
+        let userBaseColor = new THREE.Color(0x00ffff);
 
         // 旋转交互变量
         let previousFingerPos = { x: 0, y: 0 };
@@ -185,6 +572,18 @@
 
         function setCameraHint(message) {
             document.getElementById('camera-hint').innerText = message;
+        }
+
+        function updateShapeDisplay(shape) {
+            const meta = SHAPE_META[shape];
+            if (!meta) {
+                return;
+            }
+
+            document.getElementById('shape-name').innerText = meta.label;
+            document.getElementById('shape-badge').innerText = meta.badge;
+            document.getElementById('shape-description').innerText = meta.description;
+            document.documentElement.style.setProperty('--shape-accent', meta.accent);
         }
 
         function setSystemStatus(state, message) {
@@ -274,9 +673,8 @@
                     modeFrameCounter = 0;
                 } else {
                     modeFrameCounter++;
-                    const switchThreshold = 4;
 
-                    if (modeFrameCounter > switchThreshold) {
+                    if (modeFrameCounter > MODE_SWITCH_THRESHOLD) {
                         currentStableMode = detectedMode;
                         modeFrameCounter = 0;
                         isTrackingRotation = false;
@@ -304,7 +702,7 @@
                         previousRollAngle = Math.atan2(dy, dx);
                         isTrackingRoll = true;
                     } else {
-                        const lerpFactor = 0.2;
+                        const lerpFactor = TRACKING_LERP;
                         smoothedIndexTip.x = THREE.MathUtils.lerp(smoothedIndexTip.x, rawIndex.x, lerpFactor);
                         smoothedIndexTip.y = THREE.MathUtils.lerp(smoothedIndexTip.y, rawIndex.y, lerpFactor);
                         smoothedMiddleTip.x = THREE.MathUtils.lerp(smoothedMiddleTip.x, rawMiddle.x, lerpFactor);
@@ -320,7 +718,7 @@
                     if (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
                     if (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
 
-                    const inputVelocity = -deltaAngle * 1.5;
+                    const inputVelocity = -deltaAngle * ROLL_SENSITIVITY;
                     rotationVelocity.z = THREE.MathUtils.lerp(rotationVelocity.z, inputVelocity, 0.3);
 
                     previousRollAngle = currentAngle;
@@ -335,16 +733,16 @@
                         isTrackingRotation = true;
                     }
 
-                    const smoothingFactor = 0.2;
+                    const smoothingFactor = TRACKING_LERP;
                     smoothedFingerPos.x = THREE.MathUtils.lerp(smoothedFingerPos.x, rawFingerX, smoothingFactor);
                     smoothedFingerPos.y = THREE.MathUtils.lerp(smoothedFingerPos.y, rawFingerY, smoothingFactor);
 
                     const deltaX = smoothedFingerPos.x - previousFingerPos.x;
                     const deltaY = smoothedFingerPos.y - previousFingerPos.y;
-                    const moveThreshold = 0.005;
+                    const moveThreshold = MOVE_THRESHOLD;
 
                     if (Math.abs(deltaX) > moveThreshold || Math.abs(deltaY) > moveThreshold) {
-                        const sensitivity = 3.5;
+                        const sensitivity = ROTATE_SENSITIVITY;
                         if (Math.abs(deltaX) > Math.abs(deltaY)) {
                             const effectiveX = deltaX > 0 ? deltaX - moveThreshold : deltaX + moveThreshold;
                             rotationVelocity.y -= effectiveX * sensitivity;
@@ -371,7 +769,7 @@
                     let rawOpenness = (avgDist - 0.08) / (0.4 - 0.08);
                     rawOpenness = Math.max(0, Math.min(1, rawOpenness));
 
-                    handInfluence = THREE.MathUtils.lerp(handInfluence, rawOpenness, 0.2);
+                    handInfluence = THREE.MathUtils.lerp(handInfluence, rawOpenness, SCALE_LERP_FACTOR);
                 }
             } else {
                 if (now - lastTimeHandDetected < 800) {
@@ -387,7 +785,7 @@
                 setSystemStatus('warning', 'SEARCHING SIGNAL...');
                 setCameraHint('摄像头已连接，但暂时没有识别到手部。请把手放到画面中央并保持一定光线。');
 
-                handInfluence = THREE.MathUtils.lerp(handInfluence, 0.5, 0.02);
+                handInfluence = THREE.MathUtils.lerp(handInfluence, 0.5, SCALE_IDLE_RECOVERY);
 
                 modeScaleText.classList.remove('active');
                 modeRotateText.classList.remove('active');
@@ -432,6 +830,7 @@
 
             // 5. Build World
             createParticles();
+            updateShapeDisplay(currentShape);
             window.addEventListener('resize', onWindowResize);
             window.addEventListener('beforeunload', () => stopActiveStream(document.getElementById('video-element')));
             await setupMediaPipe();
@@ -464,7 +863,7 @@
             const material = new THREE.PointsMaterial({
                 size: PARTICLE_SIZE,
                 map: sprite,
-                color: userBaseColor, 
+                color: 0xffffff,
                 transparent: true,
                 opacity: 0.8,
                 blending: THREE.AdditiveBlending, 
@@ -495,20 +894,70 @@
 
         function getShapeColors(type) {
             const cols = new Float32Array(PARTICLE_COUNT * 3);
-            
+            const baseR = userBaseColor.r;
+            const baseG = userBaseColor.g;
+            const baseB = userBaseColor.b;
+            const mixChannel = (base, target, amount) => base + (target - base) * amount;
+
             for (let i = 0; i < PARTICLE_COUNT; i++) {
                 let brightness = 0.2 + Math.random() * 0.8;
                 let r, g, b;
 
                 if (type === 'saturn') {
                     if (i < PARTICLE_COUNT * SATURN_BODY_RATIO) {
-                        r = 1.0; g = 0.7; b = 0.3; 
+                        r = mixChannel(baseR, 1.0, 0.4);
+                        g = mixChannel(baseG, 0.72, 0.5);
+                        b = mixChannel(baseB, 0.28, 0.7);
                     } else {
-                        r = 0.6; g = 0.8; b = 1.0; 
+                        r = mixChannel(baseR, 0.55, 0.42);
+                        g = mixChannel(baseG, 0.82, 0.38);
+                        b = mixChannel(baseB, 1.0, 0.22);
                     }
                     r *= brightness; g *= brightness; b *= brightness;
+                } else if (type === 'heart') {
+                    const pulse = (Math.sin(i * 0.017) + 1) * 0.5;
+                    r = mixChannel(baseR, 1.0, 0.55);
+                    g = mixChannel(baseG, 0.28 + pulse * 0.12, 0.52);
+                    b = mixChannel(baseB, 0.42 + pulse * 0.18, 0.5);
+                    r *= brightness; g *= brightness * 0.92; b *= brightness * 0.9;
+                } else if (type === 'lotus') {
+                    const bloom = (Math.sin(i * 0.014) + 1) * 0.5;
+                    r = mixChannel(baseR, 0.95, 0.38);
+                    g = mixChannel(baseG, 0.58 + bloom * 0.12, 0.28);
+                    b = mixChannel(baseB, 0.92, 0.42);
+                    r *= brightness; g *= brightness; b *= brightness * 1.06;
+                } else if (type === 'galaxy') {
+                    const swirl = (Math.sin(i * 0.009) + 1) * 0.5;
+                    r = mixChannel(baseR, 0.4 + swirl * 0.18, 0.35);
+                    g = mixChannel(baseG, 0.58 + swirl * 0.2, 0.3);
+                    b = mixChannel(baseB, 1.0, 0.52);
+                    r *= brightness * 0.92; g *= brightness; b *= brightness * 1.08;
+                } else if (type === 'aurora') {
+                    const wave = (Math.sin(i * 0.012) + 1) * 0.5;
+                    const auroraR = 0.08 + wave * 0.26;
+                    const auroraG = 0.78 + wave * 0.2;
+                    const auroraB = 0.88 + (1 - wave) * 0.12;
+                    r = mixChannel(baseR, auroraR, 0.55);
+                    g = mixChannel(baseG, auroraG, 0.42);
+                    b = mixChannel(baseB, auroraB, 0.56);
+                    r *= brightness; g *= brightness * 1.08; b *= brightness * 1.1;
+                } else if (type === 'prism') {
+                    const band = (i % 9) / 8;
+                    r = mixChannel(baseR, 0.36 + band * 0.48, 0.48);
+                    g = mixChannel(baseG, 0.82 + (1 - band) * 0.12, 0.34);
+                    b = mixChannel(baseB, 1.0, 0.5);
+                    r *= brightness; g *= brightness; b *= brightness * 1.08;
+                } else if (type === 'corona') {
+                    const flare = (Math.sin(i * 0.02) + 1) * 0.5;
+                    r = mixChannel(baseR, 1.0, 0.62);
+                    g = mixChannel(baseG, 0.42 + flare * 0.28, 0.46);
+                    b = mixChannel(baseB, 0.14 + flare * 0.18, 0.62);
+                    r *= brightness * 1.06; g *= brightness; b *= brightness * 0.9;
                 } else {
-                    r = brightness; g = brightness; b = brightness;
+                    const shimmer = 0.18 + Math.random() * 0.2;
+                    r = mixChannel(baseR, 1.0, shimmer) * brightness;
+                    g = mixChannel(baseG, 1.0, shimmer) * brightness;
+                    b = mixChannel(baseB, 1.0, shimmer) * brightness;
                 }
 
                 cols[i * 3] = r;
@@ -595,6 +1044,55 @@
                     y = (Math.random() - 0.5) * (15 - r) * 0.2; 
                     if (r < 2) y *= 0.2;
                 }
+                else if (type === 'aurora') {
+                    const ribbonCount = 4;
+                    const ribbon = i % ribbonCount;
+                    const ribbonCenter = (ribbon - (ribbonCount - 1) / 2) * 4.2;
+                    const vertical = (Math.random() - 0.5) * 18;
+                    const waveA = Math.sin(vertical * 0.42 + ribbon * 1.3);
+                    const waveB = Math.sin(vertical * 0.22 + Math.random() * Math.PI * 2);
+                    x = ribbonCenter + waveA * 2.3 + waveB * 1.4;
+                    y = vertical;
+                    z = Math.cos(vertical * 0.33 + ribbon) * 5.8 + (Math.random() - 0.5) * 1.2;
+                }
+                else if (type === 'prism') {
+                    const grid = 7;
+                    const span = 9.5;
+                    const step = span / (grid - 1);
+                    const gx = Math.floor(Math.random() * grid);
+                    const gy = Math.floor(Math.random() * grid);
+                    const gz = Math.floor(Math.random() * grid);
+                    x = (gx - (grid - 1) / 2) * step;
+                    y = (gy - (grid - 1) / 2) * step;
+                    z = (gz - (grid - 1) / 2) * step;
+
+                    if (Math.random() < 0.72) {
+                        const axis = Math.floor(Math.random() * 3);
+                        const edge = Math.random() > 0.5 ? 1 : -1;
+                        if (axis === 0) x = edge * (span * 0.5);
+                        else if (axis === 1) y = edge * (span * 0.5);
+                        else z = edge * (span * 0.5);
+                    }
+
+                    x += (Math.random() - 0.5) * 0.34;
+                    y += (Math.random() - 0.5) * 0.34;
+                    z += (Math.random() - 0.5) * 0.34;
+                }
+                else if (type === 'corona') {
+                    const angle = Math.random() * Math.PI * 2;
+                    const ringRadius = 9.5 + Math.sin(angle * 7) * 0.9;
+                    const flare = Math.pow(Math.random(), 2.4) * 7.5;
+                    const radial = ringRadius + flare;
+                    x = radial * Math.cos(angle);
+                    z = radial * Math.sin(angle);
+                    y = (Math.random() - 0.5) * (1.6 + flare * 0.38);
+
+                    if (Math.random() < 0.12) {
+                        y += (Math.random() - 0.2) * 9;
+                        x *= 0.92;
+                        z *= 0.92;
+                    }
+                }
 
                 pos[i * 3] = x;
                 pos[i * 3 + 1] = y;
@@ -636,11 +1134,8 @@
                 particles.rotateOnWorldAxis(camRight, rotationVelocity.x);
                 particles.rotateOnWorldAxis(camForward, rotationVelocity.z);
                 
-                const MAX_SPEED = 0.06;
-                const MAX_ROLL_SPEED = 0.035;
-
-                rotationVelocity.x = THREE.MathUtils.clamp(rotationVelocity.x, -MAX_SPEED, MAX_SPEED);
-                rotationVelocity.y = THREE.MathUtils.clamp(rotationVelocity.y, -MAX_SPEED, MAX_SPEED);
+                rotationVelocity.x = THREE.MathUtils.clamp(rotationVelocity.x, -MAX_ROTATION_SPEED, MAX_ROTATION_SPEED);
+                rotationVelocity.y = THREE.MathUtils.clamp(rotationVelocity.y, -MAX_ROTATION_SPEED, MAX_ROTATION_SPEED);
                 rotationVelocity.z = THREE.MathUtils.clamp(rotationVelocity.z, -MAX_ROLL_SPEED, MAX_ROLL_SPEED);
 
                 rotationVelocity.x *= 0.92; 
@@ -677,6 +1172,19 @@
                     tx = rx; tz = rz;
                 } else if (currentShape === 'lotus') {
                      ty += Math.sin(time + tx) * 0.5;
+                } else if (currentShape === 'aurora') {
+                    tx += Math.sin(time * 1.8 + ty * 0.45) * 0.8;
+                    tz += Math.cos(time * 1.35 + tx * 0.22) * 0.7;
+                } else if (currentShape === 'prism') {
+                    const pulse = 1 + Math.sin(time * 2.2 + (idx % 21)) * 0.035;
+                    tx *= pulse;
+                    ty *= pulse;
+                    tz *= pulse;
+                } else if (currentShape === 'corona') {
+                    const flarePulse = 1 + Math.sin(time * 4.6 + normalizedDist * 7.5) * 0.08;
+                    tx *= flarePulse;
+                    tz *= flarePulse;
+                    ty += Math.cos(time * 5.1 + i * 0.015) * 0.16;
                 } else {
                     tx += Math.sin(time * 2 + i) * turbulence;
                     ty += Math.cos(time * 3 + i) * turbulence;
@@ -726,7 +1234,7 @@
             }
 
             if (!handsController) {
-                handsController = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
+                handsController = new Hands({ locateFile: (file) => `./vendor/mediapipe/hands/${file}` });
                 handsController.setOptions({
                     maxNumHands: 1,
                     modelComplexity: 1,
@@ -770,17 +1278,7 @@
             currentShape = shape;
             targetPositions = getShapePositions(shape);
             targetColors = getShapeColors(shape);
-
-            if (shape === 'saturn') {
-                const white = new THREE.Color(0xffffff);
-                new TWEEN.Tween(particles.material.color)
-                    .to({ r: 1, g: 1, b: 1 }, 500)
-                    .start();
-            } else {
-                new TWEEN.Tween(particles.material.color)
-                    .to({ r: userBaseColor.r, g: userBaseColor.g, b: userBaseColor.b }, 500)
-                    .start();
-            }
+            updateShapeDisplay(shape);
 
             document.querySelectorAll('[data-shape]').forEach(btn => {
                 btn.classList.remove('active');
@@ -790,19 +1288,10 @@
 
         window.updateColor = (hex) => {
             const c = new THREE.Color(hex);
-            userBaseColor = c; 
+            userBaseColor = c;
 
-            if(particles) {
-                if (currentShape !== 'saturn') {
-                    const initial = particles.material.color.clone();
-                    let alpha = 0;
-                    const anim = () => {
-                        alpha += 0.05;
-                        particles.material.color.lerpColors(initial, c, alpha);
-                        if (alpha < 1) requestAnimationFrame(anim);
-                    };
-                    anim();
-                }
+            if (particles) {
+                targetColors = getShapeColors(currentShape);
             }
         };
 
@@ -813,26 +1302,6 @@
 
         window.retryCamera = async () => {
             await setupMediaPipe();
-        };
-
-        const TWEEN = {
-            Tween: function(obj) {
-                this.obj = obj;
-                this.target = {};
-                this.duration = 1000;
-                this.startTime = 0;
-                this.to = function(target, duration) { this.target = target; this.duration = duration; return this; };
-                this.start = function() { this.startTime = performance.now(); this.initial = { r: this.obj.r, g: this.obj.g, b: this.obj.b }; requestAnimationFrame(this.update.bind(this)); return this; };
-                this.update = function(time) {
-                    const elapsed = time - this.startTime;
-                    const progress = Math.min(elapsed / this.duration, 1);
-                    const ease = 1 - Math.pow(1 - progress, 3);
-                    this.obj.r = this.initial.r + (this.target.r - this.initial.r) * ease;
-                    this.obj.g = this.initial.g + (this.target.g - this.initial.g) * ease;
-                    this.obj.b = this.initial.b + (this.target.b - this.initial.b) * ease;
-                    if (progress < 1) { requestAnimationFrame(this.update.bind(this)); }
-                };
-            }
         };
 
         init();
